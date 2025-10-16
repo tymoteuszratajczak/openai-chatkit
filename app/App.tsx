@@ -1,9 +1,8 @@
 "use client";
 
-import { useCallback, useRef } from "react";
+import { useCallback, useEffect, useRef } from "react";
 import { ChatKitPanel, type FactAction } from "@/components/ChatKitPanel";
 import { useColorScheme } from "@/hooks/useColorScheme";
-import renderMathInElement from "katex/contrib/auto-render";
 import "katex/dist/katex.min.css";
 
 const loadAutoRender = () =>
@@ -12,21 +11,68 @@ const loadAutoRender = () =>
 export default function App() {
   const { scheme, setScheme } = useColorScheme();
   const wrapRef = useRef<HTMLDivElement>(null);
+  const katexRenderRef = useRef<((root: HTMLElement) => void) | null>(null);
 
-  const renderMath = useCallback(async () => {
-    if (!wrapRef.current) return;
-    const renderMathInElement = await loadAutoRender();
-    renderMathInElement(wrapRef.current, {
-      delimiters: [
-        { left: "$$", right: "$$", display: true },
-        { left: "\\[", right: "\\]", display: true },
-        { left: "$", right: "$", display: false },
-        { left: "\\(", right: "\\)", display: false },
-      ],
-      throwOnError: false,
+  // 1. Wczytaj KaTeX tylko raz i przygotuj funkcję renderującą
+  useEffect(() => {
+    let cancelled = false;
+
+    loadAutoRender().then((renderMathInElement) => {
+      if (cancelled) return;
+      katexRenderRef.current = (root: HTMLElement) => {
+        renderMathInElement(root, {
+          delimiters: [
+            { left: "$$", right: "$$", display: true },
+            { left: "\\[", right: "\\]", display: true },
+            { left: "$", right: "$", display: false },
+            { left: "\\(", right: "\\)", display: false },
+          ],
+          throwOnError: false,
+          ignoredTags: ["script", "noscript", "style", "textarea", "pre", "code"],
+        });
+      };
+
+      // pierwszy render po starcie
+      if (wrapRef.current) katexRenderRef.current(wrapRef.current);
     });
+
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
+  // 2. Obserwuj DOM — KaTeX renderuje się automatycznie po nowych wiadomościach
+  useEffect(() => {
+    if (!wrapRef.current) return;
+    const root = wrapRef.current;
+
+    let rafId = 0;
+    const scheduleRender = () => {
+      if (rafId) cancelAnimationFrame(rafId);
+      rafId = requestAnimationFrame(() => {
+        if (katexRenderRef.current) katexRenderRef.current(root);
+      });
+    };
+
+    const observer = new MutationObserver(() => {
+      scheduleRender();
+    });
+
+    observer.observe(root, {
+      childList: true,
+      subtree: true,
+      characterData: true,
+    });
+
+    scheduleRender();
+
+    return () => {
+      observer.disconnect();
+      if (rafId) cancelAnimationFrame(rafId);
+    };
+  }, []);
+
+  // 3. Standardowy kod ChatKit
   const handleWidgetAction = useCallback(async (action: FactAction) => {
     if (process.env.NODE_ENV !== "production") {
       console.info("[ChatKitPanel] widget action", action);
@@ -37,8 +83,8 @@ export default function App() {
     if (process.env.NODE_ENV !== "production") {
       console.debug("[ChatKitPanel] response end");
     }
-    renderMath(); // <--- tu renderuje wzory po odpowiedzi
-  }, [renderMath]);
+    // KaTeX renderuje się automatycznie przez MutationObserver
+  }, []);
 
   return (
     <main className="flex min-h-screen flex-col items-center justify-end bg-slate-100 dark:bg-slate-950">
