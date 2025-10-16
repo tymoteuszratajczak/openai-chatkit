@@ -5,18 +5,23 @@ import { ChatKitPanel, type FactAction } from "@/components/ChatKitPanel";
 import { useColorScheme } from "@/hooks/useColorScheme";
 import "katex/dist/katex.min.css";
 
-/** Lazy import: poprawna ścieżka bez /auto-render/auto-render */
+/** Lazy import KaTeX auto-render (właściwa ścieżka) */
 const loadAutoRender = () =>
   import("katex/contrib/auto-render").then((m) => m.default);
 
 export default function App() {
   const { scheme, setScheme } = useColorScheme();
+
+  /** Kontener, wewnątrz którego mają być renderowane wzory */
   const wrapRef = useRef<HTMLDivElement>(null);
 
-  /** Trzymamy już zainicjalizowaną funkcję renderującą (po lazy imporcie) */
+  /**
+   * Trzymamy zainicjalizowaną funkcję renderującą KaTeX.
+   * Uwaga: renderujemy ZAWSZE tylko wewnątrz `wrapRef`.
+   */
   const katexRenderRef = useRef<((root: HTMLElement) => void) | null>(null);
 
-  /** 1) Załaduj KaTeX raz i przygotuj renderer */
+  /** 1) Lazy load KaTeX i przygotowanie renderera (raz) */
   useEffect(() => {
     let cancelled = false;
 
@@ -32,12 +37,11 @@ export default function App() {
             { left: "\\(", right: "\\)", display: false },
           ],
           throwOnError: false,
-          // dzięki deklaracji w types/ mamy pełny typ bez ts-ignore
           ignoredTags: ["script", "noscript", "style", "textarea", "pre", "code"],
         });
       };
 
-      // pierwszy render po starcie
+      // pierwszy render po starcie (jeśli już jest jakaś treść)
       if (wrapRef.current) katexRenderRef.current(wrapRef.current);
     });
 
@@ -46,7 +50,11 @@ export default function App() {
     };
   }, []);
 
-  /** 2) Obserwuj DOM — renderuj KaTeX zawsze, gdy ChatKit doda/zmieni treść */
+  /**
+   * 2) MutationObserver — bez żadnych „timeoutów”.
+   * Obserwujemy cały dokument, ale renderujemy TYLKO,
+   * gdy zmiana dotyczy węzłów w obrębie naszego `wrapRef`.
+   */
   useEffect(() => {
     if (!wrapRef.current) return;
     const root = wrapRef.current;
@@ -55,21 +63,31 @@ export default function App() {
     const scheduleRender = () => {
       if (rafId) cancelAnimationFrame(rafId);
       rafId = requestAnimationFrame(() => {
-        if (katexRenderRef.current) katexRenderRef.current(root);
+        if (katexRenderRef.current) {
+          katexRenderRef.current(root);
+        }
       });
     };
 
-    const observer = new MutationObserver(() => {
-      scheduleRender();
+    const observer = new MutationObserver((mutations) => {
+      // szybka filtracja – reaguj tylko na zmiany dotykające naszego kontenera
+      for (const m of mutations) {
+        const t = m.target as Node | null;
+        if (t && root.contains(t)) {
+          scheduleRender();
+          break;
+        }
+      }
     });
 
-    observer.observe(root, {
+    // obserwuj cały dokument (gdyby ChatKit renderował przez portale / głębiej)
+    observer.observe(document.body, {
       childList: true,
       subtree: true,
       characterData: true,
     });
 
-    // safety: gdyby coś już było w DOM zanim wystartuje observer
+    // bezpieczeństwo: zrób pierwszy pass
     scheduleRender();
 
     return () => {
@@ -78,7 +96,7 @@ export default function App() {
     };
   }, []);
 
-  /** 3) Handlery ChatKit — bez setTimeout, KaTeX ogarnia MutationObserver */
+  /** 3) Handlery ChatKit — nic nie trzeba robić; MO ogarnia render */
   const handleWidgetAction = useCallback(async (action: FactAction) => {
     if (process.env.NODE_ENV !== "production") {
       console.info("[ChatKitPanel] widget action", action);
@@ -89,7 +107,7 @@ export default function App() {
     if (process.env.NODE_ENV !== "production") {
       console.debug("[ChatKitPanel] response end");
     }
-    // nic nie robimy — KaTeX zreactuje na zmiany DOM
+    // celowo nic – MutationObserver wyłapie zmiany w DOM i odpali KaTeX
   }, []);
 
   return (
