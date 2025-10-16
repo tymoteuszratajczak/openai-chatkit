@@ -5,20 +5,24 @@ import { ChatKitPanel, type FactAction } from "@/components/ChatKitPanel";
 import { useColorScheme } from "@/hooks/useColorScheme";
 import "katex/dist/katex.min.css";
 
+/** Lazy import: poprawna ścieżka bez /auto-render/auto-render */
 const loadAutoRender = () =>
   import("katex/contrib/auto-render").then((m) => m.default);
 
 export default function App() {
   const { scheme, setScheme } = useColorScheme();
   const wrapRef = useRef<HTMLDivElement>(null);
+
+  /** Trzymamy już zainicjalizowaną funkcję renderującą (po lazy imporcie) */
   const katexRenderRef = useRef<((root: HTMLElement) => void) | null>(null);
 
-  // 1. Wczytaj KaTeX tylko raz i przygotuj funkcję renderującą
+  /** 1) Załaduj KaTeX raz i przygotuj renderer */
   useEffect(() => {
     let cancelled = false;
 
     loadAutoRender().then((renderMathInElement) => {
       if (cancelled) return;
+
       katexRenderRef.current = (root: HTMLElement) => {
         renderMathInElement(root, {
           delimiters: [
@@ -28,6 +32,7 @@ export default function App() {
             { left: "\\(", right: "\\)", display: false },
           ],
           throwOnError: false,
+          // dzięki deklaracji w types/ mamy pełny typ bez ts-ignore
           ignoredTags: ["script", "noscript", "style", "textarea", "pre", "code"],
         });
       };
@@ -41,7 +46,7 @@ export default function App() {
     };
   }, []);
 
-  // 2. Obserwuj DOM — KaTeX renderuje się automatycznie po nowych wiadomościach
+  /** 2) Obserwuj DOM — renderuj KaTeX zawsze, gdy ChatKit doda/zmieni treść */
   useEffect(() => {
     if (!wrapRef.current) return;
     const root = wrapRef.current;
@@ -64,6 +69,7 @@ export default function App() {
       characterData: true,
     });
 
+    // safety: gdyby coś już było w DOM zanim wystartuje observer
     scheduleRender();
 
     return () => {
@@ -72,7 +78,7 @@ export default function App() {
     };
   }, []);
 
-  // 3. Standardowy kod ChatKit
+  /** 3) Handlery ChatKit — bez setTimeout, KaTeX ogarnia MutationObserver */
   const handleWidgetAction = useCallback(async (action: FactAction) => {
     if (process.env.NODE_ENV !== "production") {
       console.info("[ChatKitPanel] widget action", action);
@@ -83,7 +89,7 @@ export default function App() {
     if (process.env.NODE_ENV !== "production") {
       console.debug("[ChatKitPanel] response end");
     }
-    // KaTeX renderuje się automatycznie przez MutationObserver
+    // nic nie robimy — KaTeX zreactuje na zmiany DOM
   }, []);
 
   return (
