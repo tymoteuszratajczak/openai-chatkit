@@ -17,7 +17,7 @@ export default function App() {
 
   /**
    * Trzymamy zainicjalizowaną funkcję renderującą KaTeX.
-   * Uwaga: renderujemy ZAWSZE tylko wewnątrz `wrapRef`.
+   * Renderujemy ZAWSZE tylko wewnątrz `wrapRef`.
    */
   const katexRenderRef = useRef<((root: HTMLElement) => void) | null>(null);
 
@@ -50,64 +50,29 @@ export default function App() {
     };
   }, []);
 
-  /**
-   * 2) MutationObserver — bez żadnych „timeoutów”.
-   * Obserwujemy cały dokument, ale renderujemy TYLKO,
-   * gdy zmiana dotyczy węzłów w obrębie naszego `wrapRef`.
-   */
-  useEffect(() => {
-    if (!wrapRef.current) return;
-    const root = wrapRef.current;
-
-    let rafId = 0;
-    const scheduleRender = () => {
-      if (rafId) cancelAnimationFrame(rafId);
-      rafId = requestAnimationFrame(() => {
-        if (katexRenderRef.current) {
-          katexRenderRef.current(root);
-        }
-      });
-    };
-
-    const observer = new MutationObserver((mutations) => {
-      // szybka filtracja – reaguj tylko na zmiany dotykające naszego kontenera
-      for (const m of mutations) {
-        const t = m.target as Node | null;
-        if (t && root.contains(t)) {
-          scheduleRender();
-          break;
-        }
-      }
-    });
-
-    // obserwuj cały dokument (gdyby ChatKit renderował przez portale / głębiej)
-    observer.observe(document.body, {
-      childList: true,
-      subtree: true,
-      characterData: true,
-    });
-
-    // bezpieczeństwo: zrób pierwszy pass
-    scheduleRender();
-
-    return () => {
-      observer.disconnect();
-      if (rafId) cancelAnimationFrame(rafId);
-    };
-  }, []);
-
-  /** 3) Handlery ChatKit — nic nie trzeba robić; MO ogarnia render */
+  /** 2) Handlery ChatKit */
   const handleWidgetAction = useCallback(async (action: FactAction) => {
     if (process.env.NODE_ENV !== "production") {
       console.info("[ChatKitPanel] widget action", action);
     }
   }, []);
 
+  /**
+   * Po ZAKOŃCZENIU odpowiedzi:
+   * render KaTeX po commicie DOM (bez timeoutów) – podwójny rAF.
+   * Dzięki temu unikamy konfliktu z Reactem (minified error #185).
+   */
   const handleResponseEnd = useCallback(() => {
     if (process.env.NODE_ENV !== "production") {
       console.debug("[ChatKitPanel] response end");
     }
-    // celowo nic – MutationObserver wyłapie zmiany w DOM i odpali KaTeX
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        if (wrapRef.current && katexRenderRef.current) {
+          katexRenderRef.current(wrapRef.current);
+        }
+      });
+    });
   }, []);
 
   return (
