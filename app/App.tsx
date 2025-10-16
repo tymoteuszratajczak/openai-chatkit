@@ -6,7 +6,7 @@ import { useColorScheme } from "@/hooks/useColorScheme";
 import "katex/dist/katex.min.css";
 
 const loadAutoRender = () =>
-  import("katex/contrib/auto-render/auto-render.js").then((m) => m.default);
+  import("katex/contrib/auto-render/auto-render").then((m) => m.default);
 
 export default function App() {
   const { scheme, setScheme } = useColorScheme();
