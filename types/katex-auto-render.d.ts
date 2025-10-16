@@ -1,4 +1,3 @@
-// types/katex-auto-render.d.ts
 declare module "katex/contrib/auto-render" {
   export interface Delimiter {
     left: string;
@@ -9,13 +8,8 @@ declare module "katex/contrib/auto-render" {
   export interface AutoRenderOptions {
     delimiters?: Delimiter[];
     throwOnError?: boolean;
-    // możesz rozszerzyć o inne pola KaTeX jeśli będziesz potrzebować:
-    // macros?: Record<string, string>;
-    // errorColor?: string;
-    // fleqn?: boolean;
-    // leqno?: boolean;
-    // ignoredTags?: string[];
-    // ignoredClasses?: string[];
+    /** brakowało w @types — dodajemy, żeby TS nie krzyczał */
+    ignoredTags?: string[];
   }
 
   export default function renderMathInElement(
