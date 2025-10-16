@@ -3,6 +3,7 @@
 import { useCallback, useRef } from "react";
 import { ChatKitPanel, type FactAction } from "@/components/ChatKitPanel";
 import { useColorScheme } from "@/hooks/useColorScheme";
+import renderMathInElement from "katex/contrib/auto-render";
 import "katex/dist/katex.min.css";
 
 const loadAutoRender = () =>
