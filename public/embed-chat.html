@@ -3,13 +3,16 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <!-- 1) Ładowanie ChatKit -->
   <script src="https://cdn.platform.openai.com/deployments/chatkit/chatkit.js" async></script>
+
   <style>
     html,body,#wrap{height:100%} body{margin:0;background:#0b1220;color:#e5e7eb;font-family:system-ui,Segoe UI,Roboto}
-    #wrap{display:flex;align-items:center;justify-content:center}
+    #wrap{display:flex;align-items:center;justify-content:center;padding:12px}
     #my-chat{width:100%;max-width:420px;height:640px}
-    #debug{position:fixed;left:8px;right:8px;bottom:8px;font-size:12px;opacity:.85}
-    #debug pre{white-space:pre-wrap;background:#111827;color:#e5e7eb;padding:8px;border-radius:8px}
+    #debug{position:fixed;left:8px;right:8px;bottom:8px;font-size:12px;opacity:.9;pointer-events:none}
+    #debug pre{white-space:pre-wrap;background:#111827;color:#e5e7eb;padding:8px;border-radius:8px;margin:0 0 6px}
   </style>
 </head>
 <body>
@@ -18,44 +21,73 @@
 
   <script>
     const SESSION_URL = "https://powtor-y778f.kinsta.app/chatkit/session";
+    const CHATKIT_JS = "https://cdn.platform.openai.com/deployments/chatkit/chatkit.js";
+
     const $d = document.getElementById("debug");
-    const log = m => $d.innerHTML = `<pre>${(new Date).toLocaleTimeString()} ${m}</pre>` + $d.innerHTML;
+    const log = m => $d.innerHTML = `<pre>${(new Date).toLocaleTimeString()}  ${m}</pre>` + $d.innerHTML;
 
-    async function fetchClientSecret(){
-      const r = await fetch(SESSION_URL,{
-        method:"POST",
-        headers:{"Content-Type":"application/json","Cache-Control":"no-store"},
-        body:"{}"
-      });
-      const t = await r.text(); let j; try{j=JSON.parse(t)}catch{}
-      log(`POST /chatkit/session → ${r.status}\n${t.slice(0,200)}${t.length>200?"…":""}`);
-      if(!r.ok) throw new Error(`Session ${r.status}: ${t}`);
-      if(!j?.client_secret) throw new Error("Brak client_secret");
-      return j.client_secret;
-    }
-
-    async function mount(){
-      if(!customElements.get("openai-chatkit")){
-        try{ await customElements.whenDefined("openai-chatkit"); }catch{}
+    async function checkChatkitJs() {
+      try {
+        const r = await fetch(CHATKIT_JS, { method: "HEAD", cache: "no-store" });
+        log(`chatkit.js → ${r.status}`);
+        return r.ok;
+      } catch (e) {
+        log("chatkit.js fetch error: " + e.message);
+        return false;
       }
-      const chat=document.createElement("openai-chatkit");
-      chat.style.cssText="display:block;width:100%;height:100%";
-      chat.setOptions({
-        api:{
-          async getClientSecret(){
-            try{ return await fetchClientSecret(); }
-            catch(e){ log("getClientSecret: "+e.message); throw e; }
-          }
-        },
-        theme:{ colorPrimary:"#111827", radius:16 }
-      });
-      document.getElementById("my-chat").innerHTML="";
-      document.getElementById("my-chat").appendChild(chat);
-      log("ChatKit mounted");
     }
 
-    if(document.readyState==="complete") mount();
-    else addEventListener("load",mount);
+    async function getClientSecret() {
+      const r = await fetch(SESSION_URL, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "Cache-Control": "no-store" },
+        body: "{}"
+      });
+      const txt = await r.text();
+      let json; try { json = JSON.parse(txt); } catch {}
+      log(`POST /chatkit/session → ${r.status}\n${txt.slice(0,180)}${txt.length>180?"…":""}`);
+      if (!r.ok) throw new Error(`Session ${r.status}: ${txt}`);
+      if (!json?.client_secret) throw new Error("Brak client_secret w odpowiedzi");
+      return json.client_secret;
+    }
+
+    async function waitForElement(name, timeoutMs=8000) {
+      const start = Date.now();
+      while (!customElements.get(name)) {
+        if (Date.now()-start > timeoutMs) return false;
+        await new Promise(r => setTimeout(r, 100));
+      }
+      return true;
+    }
+
+    async function mount() {
+      // 1) sprawdź czy skrypt ChatKit jest w ogóle dostępny
+      const jsOk = await checkChatkitJs();
+      if (!jsOk) { log("❌ chatkit.js niedostępny (CSP/sandbox?)"); return; }
+
+      // 2) poczekaj aż web-component się zarejestruje
+      const defined = await waitForElement("openai-chatkit", 10000);
+      log(defined ? "openai-chatkit gotowy" : "⚠️ openai-chatkit NIE został zarejestrowany (skrypt nie działa)");
+
+      // 3) pobierz token (bez tego nie zadziała)
+      let token;
+      try { token = await getClientSecret(); }
+      catch (e) { log("❌ getClientSecret error: " + e.message); return; }
+
+      // 4) dopiero teraz montuj i przekazuj token
+      const chat = document.createElement("openai-chatkit");
+      chat.style.cssText = "display:block;width:100%;height:100%";
+      chat.setOptions({
+        api: { clientToken: token },       // PROSTO: od razu token (ChatKit sam poprosi o nowy, jeśli trzeba)
+        theme: { colorPrimary: "#111827", radius: 16 }
+      });
+      document.getElementById("my-chat").innerHTML = "";
+      document.getElementById("my-chat").appendChild(chat);
+      log("✅ ChatKit mounted (z tokenem)");
+    }
+
+    if (document.readyState === "complete") mount();
+    else addEventListener("load", mount);
   </script>
 </body>
 </html>
