@@ -14,10 +14,22 @@ function fixDelimiters(el: HTMLElement) {
   const walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT);
   const texts: Text[] = [];
   while (walker.nextNode()) texts.push(walker.currentNode as Text);
+
   texts.forEach((t) => {
     if (!t.nodeValue) return;
-    // Nie dotykamy już poprawnych `\]`
-    t.nodeValue = t.nodeValue.replace(/\\\[((?:(?!\\\]).)*?)\](?!\\)/gs, "\\[$1\\]");
+    let s = t.nodeValue;
+
+    // 1) Tymczasowo zabezpiecz już poprawne zamknięcia \]
+    s = s.replace(/\\\]/g, "__KATEX_ESC_BRACKET__");
+
+    // 2) Popraw niezamknięte \[ ... ]  ->  \[ ... \]
+    //    UWAGA: bez flagi `s`; [\s\S] działa jak dotAll.
+    s = s.replace(/\\\[([\s\S]*?)\](?!\\)/g, "\\[$1\\]");
+
+    // 3) Przywróć zabezpieczone \]
+    s = s.replace(/__KATEX_ESC_BRACKET__/g, "\\]");
+
+    t.nodeValue = s;
   });
 }
 
