@@ -5,94 +5,70 @@ import { ChatKitPanel, type FactAction } from "@/components/ChatKitPanel";
 import { useColorScheme } from "@/hooks/useColorScheme";
 import "katex/dist/katex.min.css";
 
-/** Lazy import KaTeX auto-render */
+// Lazy import KaTeX auto-render (stabilna ścieżka)
 const loadAutoRender = () =>
   import("katex/contrib/auto-render").then((m) => m.default);
 
-/** Normalizacja: \[ ... ]  ->  \[ ... \]  (bez flagi `s` – zgodne z ES2017) */
+// Opcjonalna normalizacja: zamień `\[ ... ]` -> `\[ ... \]`
 function fixDelimiters(el: HTMLElement) {
   const walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT);
   const texts: Text[] = [];
   while (walker.nextNode()) texts.push(walker.currentNode as Text);
-
-  texts.forEach((t) => {
-    if (!t.nodeValue) return;
-    let s = t.nodeValue;
-
-    // chroń już poprawne '\]'
-    s = s.replace(/\\\]/g, "__KATEX_ESC_BRACKET__");
-
-    // popraw nieescapowane zamknięcia bloku LaTeX
-    // [\s\S] = dowolny znak (zamiast flagi `s`)
-    s = s.replace(/\\\[([\s\S]*?)\](?!\\)/g, "\\[$1\\]");
-
-    s = s.replace(/__KATEX_ESC_BRACKET__/g, "\\]");
-    t.nodeValue = s;
-  });
+  for (const t of texts) {
+    const v = t.nodeValue;
+    if (!v) continue;
+    // BEZ flagi `s` – zgodne z targetem ES2017 (Next 15 też to łyka)
+    t.nodeValue = v.replace(/\\\[((?:.|\n)*?)\](?!\\)/g, "\\[$1\\]");
+  }
 }
 
-/** Pomocniczo: dodaj do wyniku jeśli to sensowny, nie-globalny root */
-function safePushRoot(list: HTMLElement[], node: Node | null | undefined) {
-  if (!node) return;
-  if (!(node instanceof HTMLElement)) return;
-  if (node === document.documentElement || node === document.body) return;
-  if (list.includes(node)) return;
-  if (node.childElementCount === 0) return;
-  list.push(node);
-}
-
-/** Zbierz potencjalne „kontenery treści”, również wewnątrz *otwartych* Shadow DOM. */
+/**
+ * Zwraca elementy-ROOT-y, wewnątrz których renderujemy LaTeX.
+ * Bazujemy wyłącznie na stabilnych atrybutach data-*, a nie losowych klasach.
+ */
 function getCandidateRoots(fallback: HTMLElement | null): HTMLElement[] {
   const roots: HTMLElement[] = [];
+  const push = (el: Element | null) => {
+    if (el && el instanceof HTMLElement && !roots.includes(el)) roots.push(el);
+  };
 
-  // A) to co mamy w zwykłym DOM (wrapRef + kilka heurystyk)
-  safePushRoot(roots, fallback);
-  safePushRoot(roots, document.querySelector("[data-ck-content]"));
-  safePushRoot(roots, document.querySelector("[data-chatkit-root]"));
-  safePushRoot(roots, document.querySelector(".ck-content"));
-  safePushRoot(roots, document.querySelector(".chatkit-message"));
-  safePushRoot(roots, document.querySelector(".chatkit-root"));
+  // 1) fallback – gdyby ChatKit renderował inline w naszym wrapRef
+  push(fallback);
 
-  // B) otwarte Shadow DOM hostingowane przez elementy ck-*/chatkit
-  const allEls = document.querySelectorAll<HTMLElement>("*");
-  allEls.forEach((el) => {
-    const tag = el.tagName.toLowerCase();
-    const looksLikeChatKitHost =
-      tag.startsWith("ck-") ||
-      tag.includes("chatkit") ||
-      tag.includes("oai-") ||
-      tag.includes("openai");
+  // 2) Każdy “item” z wiadomością asystenta (stabilny atrybut z DOM)
+  document
+    .querySelectorAll<HTMLElement>('[data-thread-item="assistant-message"]')
+    .forEach(push);
 
-    const sr = (el as any).shadowRoot as ShadowRoot | undefined;
-    if (looksLikeChatKitHost && sr) {
-      // znajdź wewnątrz shadowRoot sensowne kontenery treści
-      const candidates = sr.querySelectorAll<HTMLElement>(
-        "[data-ck-content], .ck-content, .chatkit-message, .chatkit-root, [part='messages'], [part='content'], main, article, section"
-      );
-      candidates.forEach((c) => safePushRoot(roots, c));
-      // jeśli nic nie znaleźliśmy, spróbujmy całego shadowRoota
-      if (candidates.length === 0) {
-        safePushRoot(roots, sr.host as HTMLElement);
-        // lub bezpośrednio pierwszy „większy” element w shadowRoot
-        const first = sr.querySelector<HTMLElement>("main, article, section, div");
-        if (first) safePushRoot(roots, first);
-      }
-    }
-  });
+  // 3) (opcjonalnie) jeśli chcesz renderować też LaTeX w wiadomościach usera:
+  // document
+  //   .querySelectorAll<HTMLElement>('[data-thread-item="user-message"]')
+  //   .forEach(push);
 
-  return roots;
+  // 4) (opcjonalnie) artykuły z całym turnem asystenta
+  document
+    .querySelectorAll<HTMLElement>('article[data-thread-turn="assistant"]')
+    .forEach(push);
+
+  // Odfiltruj <html>/<body> i puste kontenery
+  return roots.filter(
+    (el) =>
+      el !== document.documentElement &&
+      el !== document.body &&
+      (el.childElementCount > 0 || el.textContent?.trim())
+  );
 }
 
 export default function App() {
   const { scheme, setScheme } = useColorScheme();
 
-  // kontener wokół ChatKit (gdy treść nie jest w portalu)
+  // Kontener, jeśli ChatKit nie używa portali
   const wrapRef = useRef<HTMLDivElement>(null);
 
-  // przechowujemy funkcję renderującą
+  // Trzymamy referencję do funkcji renderującej KaTeX
   const katexRenderRef = useRef<((root: HTMLElement) => void) | null>(null);
 
-  /** Przygotuj renderer KaTeX (raz) */
+  // Lazy load KaTeX + przygotowanie renderera
   useEffect(() => {
     let cancelled = false;
 
@@ -100,7 +76,9 @@ export default function App() {
       if (cancelled) return;
 
       katexRenderRef.current = (root: HTMLElement) => {
+        // (opcjonalnie) normalizacja delimiterów
         fixDelimiters(root);
+
         renderMathInElement(root, {
           delimiters: [
             { left: "$$", right: "$$", display: true },
@@ -123,7 +101,14 @@ export default function App() {
     };
   }, []);
 
-  /** Po skończonej odpowiedzi – render po commitach DOM (2× rAF) */
+  // Handlery ChatKit – po zakończeniu generowania dwu-klatkowy rAF,
+  // żeby mieć pewność, że treść jest już w DOM
+  const handleWidgetAction = useCallback(async (action: FactAction) => {
+    if (process.env.NODE_ENV !== "production") {
+      console.info("[ChatKitPanel] widget action", action);
+    }
+  }, []);
+
   const handleResponseEnd = useCallback(() => {
     if (process.env.NODE_ENV !== "production") {
       console.debug("[ChatKitPanel] response end");
@@ -134,12 +119,6 @@ export default function App() {
         roots.forEach((r) => katexRenderRef.current?.(r));
       });
     });
-  }, []);
-
-  const handleWidgetAction = useCallback(async (action: FactAction) => {
-    if (process.env.NODE_ENV !== "production") {
-      console.info("[ChatKitPanel] widget action", action);
-    }
   }, []);
 
   return (
