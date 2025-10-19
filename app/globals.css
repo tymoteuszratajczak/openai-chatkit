@@ -26,3 +26,19 @@
   --font-sans: Arial, Helvetica, sans-serif;
   --font-mono: SFMono-Regular, Consolas, "Liberation Mono", monospace;
 }
+
+/* --- Mobilna korekta widoczności inputa nad klawiaturą --- */
+html,
+body {
+  height: 100%;
+  overflow: hidden;
+  overscroll-behavior: contain;
+}
+
+/* Nowoczesne przeglądarki mobilne (Safari, Chrome) obsługujące dynamic viewport height */
+@supports (height: 100dvh) {
+  html,
+  body {
+    height: 100dvh;
+  }
+}
