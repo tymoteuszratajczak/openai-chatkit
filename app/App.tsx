@@ -122,8 +122,11 @@ export default function App() {
   }, []);
 
   return (
-    <main className="flex min-h-screen flex-col items-center justify-end bg-slate-100 dark:bg-slate-950">
-      <div ref={wrapRef} className="mx-auto w-full max-w-5xl">
+    <main
+      className="flex min-h-screen w-full flex-col items-center justify-end bg-slate-100 dark:bg-slate-950"
+      style={{ minHeight: "var(--vvh, 100dvh)" }}
+    >
+      <div ref={wrapRef} className="mx-auto flex w-full max-w-5xl flex-1 px-4 sm:px-6">
         <ChatKitPanel
           theme={scheme}
           onWidgetAction={handleWidgetAction}

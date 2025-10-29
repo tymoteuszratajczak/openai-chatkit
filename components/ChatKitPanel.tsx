@@ -1,6 +1,12 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  type CSSProperties,
+} from "react";
 import { ChatKit, useChatKit } from "@openai/chatkit-react";
 import {
   STARTER_PROMPTS,
@@ -333,6 +339,12 @@ export function ChatKitPanel({
   const activeError = errors.session ?? errors.integration;
   const blockingError = errors.script ?? activeError;
 
+  const panelStyle: CSSProperties = {
+    height: "min(720px, var(--vvh, 100dvh))",
+    maxHeight: "var(--vvh, 100dvh)",
+    paddingBottom: "calc(env(safe-area-inset-bottom, 0px) + 2rem)",
+  };
+
   if (isDev) {
     console.debug("[ChatKitPanel] render state", {
       isInitializingSession,
@@ -344,7 +356,10 @@ export function ChatKitPanel({
   }
 
   return (
-    <div className="relative pb-8 flex h-[90vh] w-full rounded-2xl flex-col overflow-hidden bg-white shadow-sm transition-colors dark:bg-slate-900">
+    <div
+      className="relative flex w-full flex-1 flex-col overflow-hidden rounded-2xl bg-white shadow-sm transition-colors dark:bg-slate-900"
+      style={panelStyle}
+    >
       <ChatKit
         key={widgetInstanceKey}
         control={chatkit.control}
