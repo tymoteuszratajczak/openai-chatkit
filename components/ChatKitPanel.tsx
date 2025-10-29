@@ -357,7 +357,7 @@ export function ChatKitPanel({
 
   return (
     <div
-      className="relative flex w-full flex-1 flex-col overflow-hidden rounded-2xl bg-white shadow-sm transition-colors dark:bg-slate-900"
+      className="relative flex w-full flex-1 flex-col overflow-hidden bg-white transition-colors dark:bg-slate-900"
       style={panelStyle}
     >
       <ChatKit
