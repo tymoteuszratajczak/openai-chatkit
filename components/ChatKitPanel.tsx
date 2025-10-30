@@ -342,7 +342,7 @@ export function ChatKitPanel({
   const panelStyle: CSSProperties = {
     height: "min(720px, var(--vvh, 100dvh))",
     maxHeight: "var(--vvh, 100dvh)",
-    paddingBottom: "calc(env(safe-area-inset-bottom, 0px) + 40px)",
+    paddingBottom: "calc(env(safe-area-inset-bottom, 0px) + 6rem)",
   };
 
   if (isDev) {
