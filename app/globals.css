@@ -2,21 +2,21 @@
 
 :root {
   --background: #ffffff;
-  --foreground: #171717;
+  --foreground: #1A1A18;
   --vvh: 100dvh;
   color-scheme: light;
 }
 
 :root[data-color-scheme="dark"] {
-  --background: #0a0a0a;
-  --foreground: #ededed;
+  --background: #1A1A18;
+  --foreground: #F7F5EF;
   color-scheme: dark;
 }
 
 @media (prefers-color-scheme: dark) {
   :root:not([data-color-scheme]) {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+    --background: #1A1A18;
+    --foreground: #F7F5EF;
     color-scheme: dark;
   }
 }
