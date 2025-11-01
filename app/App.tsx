@@ -7,7 +7,10 @@ import "katex/dist/katex.min.css";
 
 // Lazy import KaTeX auto-render (stabilna ścieżka)
 const loadAutoRender = () =>
-  import("katex/contrib/auto-render").then((m) => m.default);
+  Promise.all([
+    import("katex/contrib/mhchem"),
+    import("katex/contrib/auto-render"),
+  ]).then(([, m]) => m.default);
 
 // Opcjonalna normalizacja: zamień `\[ ... ]` -> `\[ ... \]`
 function fixDelimiters(el: HTMLElement) {
@@ -87,6 +90,11 @@ export default function App() {
             { left: "\\(", right: "\\)", display: false },
           ],
           throwOnError: false,
+          trust: (context) => context.command === "\\require",
+          macros: {
+            "\\ce": "\\require{mhchem}\\ce",
+            "\\pu": "\\require{mhchem}\\pu",
+          },
           ignoredTags: ["script", "noscript", "style", "textarea", "pre", "code"],
         });
       };
