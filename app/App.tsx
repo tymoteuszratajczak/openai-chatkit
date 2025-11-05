@@ -84,7 +84,7 @@ function normalizeInlineDollar(value: string): string {
       continue;
     }
 
-    result += `\\(${body}\\)`;
+    result += `\(${body}\)`;
     cursor = end + 1;
   }
 
