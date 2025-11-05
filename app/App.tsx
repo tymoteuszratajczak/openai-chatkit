@@ -17,9 +17,78 @@ function fixDelimiters(el: HTMLElement) {
   for (const t of texts) {
     const v = t.nodeValue;
     if (!v) continue;
-    // BEZ flagi `s` – zgodne z targetem ES2017 (Next 15 też to łyka)
-    t.nodeValue = v.replace(/\\\[((?:.|\n)*?)\](?!\\)/g, "\\[$1\\]");
+
+    const normalized = normalizeInlineDollar(normalizeDisplayBrackets(v));
+    if (normalized !== v) t.nodeValue = normalized;
   }
+}
+
+// BEZ flagi `s` – zgodne z targetem ES2017 (Next 15 też to łyka)
+const DISPLAY_BRACKET_REGEX = /\\\[((?:.|\n)*?)\](?!\\)/g;
+
+function normalizeDisplayBrackets(value: string): string {
+  return value.replace(DISPLAY_BRACKET_REGEX, "\\[$1\\]");
+}
+
+function isEscaped(str: string, index: number): boolean {
+  let backslashes = 0;
+  for (let i = index - 1; i >= 0 && str[i] === "\\"; i -= 1) {
+    backslashes += 1;
+  }
+  return backslashes % 2 === 1;
+}
+
+function findInlineDollarEnd(str: string, from: number): number {
+  for (let i = from; i < str.length; i += 1) {
+    const ch = str[i];
+    if (ch !== "$") continue;
+    if (str[i + 1] === "$") {
+      i += 1; // skip display delimiter
+      continue;
+    }
+    if (!isEscaped(str, i)) return i;
+  }
+  return -1;
+}
+
+function normalizeInlineDollar(value: string): string {
+  let result = "";
+  let cursor = 0;
+
+  while (cursor < value.length) {
+    const start = value.indexOf("$", cursor);
+    if (start === -1) {
+      result += value.slice(cursor);
+      break;
+    }
+
+    result += value.slice(cursor, start);
+
+    if (value[start + 1] === "$" || isEscaped(value, start)) {
+      result += value[start];
+      cursor = start + 1;
+      continue;
+    }
+
+    const end = findInlineDollarEnd(value, start + 1);
+    if (end === -1) {
+      result += value[start];
+      cursor = start + 1;
+      continue;
+    }
+
+    const body = value.slice(start + 1, end);
+    if (!body.trim()) {
+      result += value.slice(start, end + 1);
+      cursor = end + 1;
+      continue;
+    }
+
+    result += `\\(${body}\\)`;
+    cursor = end + 1;
+  }
+
+  return result;
 }
 
 /**
