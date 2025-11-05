@@ -14,13 +14,50 @@ function fixDelimiters(el: HTMLElement) {
   const walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT);
   const texts: Text[] = [];
   while (walker.nextNode()) texts.push(walker.currentNode as Text);
-  for (const t of texts) {
-    const v = t.nodeValue;
-    if (!v) continue;
 
-    const normalized = normalizeInlineDollar(normalizeDisplayBrackets(v));
-    if (normalized !== v) t.nodeValue = normalized;
+  for (let i = 0; i < texts.length; i += 1) {
+    const start = texts[i];
+    if (!start.isConnected) continue;
+
+    const initialValue = start.nodeValue ?? "";
+    if (!initialValue) continue;
+
+    // Jeśli dany węzeł nie zawiera potencjalnych delimiterów, przechodzimy dalej
+    if (!mayContainMath(initialValue)) continue;
+
+    let combined = initialValue;
+    let lastIndex = i;
+
+    // Zbierz kolejne węzły tekstowe, jeśli obecny ciąg ma nieparzystą liczbę pojedynczych `$`
+    while (hasUnmatchedInlineDollar(combined) && lastIndex + 1 < texts.length) {
+      const nextNode = texts[lastIndex + 1];
+      if (!nextNode.isConnected) {
+        lastIndex += 1;
+        continue;
+      }
+
+      combined += nextNode.nodeValue ?? "";
+      lastIndex += 1;
+    }
+
+    const normalized = normalizeInlineDollar(normalizeDisplayBrackets(combined));
+    if (normalized === combined) continue;
+
+    const newNode = start.ownerDocument?.createTextNode(normalized);
+    if (!newNode) continue;
+
+    start.parentNode?.insertBefore(newNode, start);
+    for (let j = i; j <= lastIndex; j += 1) {
+      const target = texts[j];
+      if (target.isConnected) target.remove();
+    }
+
+    texts[i] = newNode;
   }
+}
+
+function mayContainMath(value: string): boolean {
+  return value.includes("$") || value.includes("\\[");
 }
 
 // BEZ flagi `s` – zgodne z targetem ES2017 (Next 15 też to łyka)
@@ -36,6 +73,22 @@ function isEscaped(str: string, index: number): boolean {
     backslashes += 1;
   }
   return backslashes % 2 === 1;
+}
+
+function hasUnmatchedInlineDollar(value: string): boolean {
+  let count = 0;
+  for (let i = 0; i < value.length; i += 1) {
+    if (value[i] !== "$") continue;
+
+    if (value[i + 1] === "$") {
+      i += 1; // pomijamy `$$`
+      continue;
+    }
+
+    if (!isEscaped(value, i)) count += 1;
+  }
+
+  return count % 2 === 1;
 }
 
 function findInlineDollarEnd(str: string, from: number): number {
